@@ -629,7 +629,7 @@ pub struct QuicTlsSecrets {
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct Settings {
-    pub is_set_flags: u64,
+    pub is_set_flags: IsSet,
     pub max_bytes_per_key: u64,
     pub handshake_idle_timeout_ms: u64,
     pub idle_timeout_ms: u64,
@@ -654,9 +654,61 @@ pub struct Settings {
     pub stateless_operation_expiration_ms: u16,
     pub minimum_mtu: u16,
     pub maximum_mtu: u16,
-    pub other_flags: u8,
+    pub flags: SettingsFlags,
     pub mtu_operations_per_drain: u8,
     pub mtu_discovery_missing_probe_count: u8,
+}
+
+bitfield! {
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    pub struct SettingsFlags(u8);
+    // The fields default to u8
+    send_buffering_enabled, set_send_buffering_enabled: 0, 0;
+    pacing_enabled, set_pacing_enabled: 1, 1;
+    migration_enabled, set_migration_enabled: 2, 2;
+    datagram_receive_enabled, set_datagram_receive_enabled: 3, 3;
+    server_resumption_level, set_server_resumption_level: 5, 4;
+    _reserved, _: 7, 6;
+}
+
+bitfield! {
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    pub struct IsSet(u64);
+    // The fields default to u64
+    max_bytes_per_key, set_max_bytes_per_key: 0, 0;
+    handshake_idle_timeout_ms, set_handshake_idle_timeout_ms: 1, 1;
+    idle_timeout_ms, set_idle_timeout_ms: 2, 2;
+    mtu_discovery_search_complete_timeout_us, set_mtu_discovery_search_complete_timeout_us: 3, 3;
+    tls_client_max_send_buffer, set_tls_client_max_send_buffer: 4, 4;
+    tls_server_max_send_buffer, set_tls_server_max_send_buffer: 5, 5;
+    stream_recv_window_default, set_stream_recv_window_default: 6, 6;
+    stream_recv_buffer_default, set_stream_recv_buffer_default: 7, 7;
+    conn_flow_control_window, set_conn_flow_control_window: 8, 8;
+    max_worker_queue_delay_us, set_max_worker_queue_delay_us: 9, 9;
+    max_stateless_operations, set_max_stateless_operations: 10, 10;
+    initial_window_packets, set_initial_window_packets: 11, 11;
+    send_idle_timeout_ms, set_send_idle_timeout_ms: 12, 12;
+    initiall_rtt_ms, set_initiall_rtt_ms: 13, 13;
+    max_ack_delay_ms, set_max_ack_delay_ms: 14, 14;
+    disconnect_timeout_ms, set_disconnect_timeout_ms: 15, 15;
+    keep_alive_interval_ms, set_keep_alive_interval_ms: 16, 16;
+    congestion_control_algorithm, set_congestion_control_algorithm: 17, 17;
+    peer_bidi_stream_count, set_peer_bidi_stream_count: 18, 18;
+    peer_unidi_stream_count, set_peer_unidi_stream_count: 19, 19;
+    max_binding_stateless_operations, set_max_binding_stateless_operations: 20, 20;
+    stateless_operation_expiration_ms, set_stateless_operation_expiration_ms: 21, 21;
+    minimum_mtu, set_minimum_mtu: 22, 22;
+    maximum_mtu, set_maximum_mtu: 23, 23;
+    send_buffering_enabled, set_send_buffering_enabled: 24, 24;
+    pacing_enabled, set_pacing_enabled: 25, 25;
+    migration_enabled, set_migration_enabled: 26, 26;
+    datagram_receive_enabled, set_datagram_receive_enabled: 27, 27;
+    server_resumption_level, set_server_resumption_level: 28, 28;
+    mtu_operations_per_drain, set_mtu_operations_per_drain: 29, 29;
+    mtu_discovery_missing_probe_count, set_mtu_discovery_missing_probe_count: 30, 30;
+    _reserved, _: 63, 31;
 }
 
 pub const PARAM_GLOBAL_RETRY_MEMORY_PERCENT: u32 = 0x01000000;
@@ -887,7 +939,6 @@ pub struct StreamEventSendShutdownComplete {
     pub graceful: bool,
 }
 
-
 bitfield! {
     #[repr(C)]
     #[derive(Clone, Copy)]
@@ -901,7 +952,7 @@ bitfield! {
 #[derive(Copy, Clone)]
 pub struct StreamEventShutdownComplete {
     connection_shutdown: bool,
-    flags: StreamEventShutdownCompleteBitfields
+    flags: StreamEventShutdownCompleteBitfields,
 }
 
 #[repr(C)]
@@ -1124,7 +1175,7 @@ impl QuicPerformance {
 impl Settings {
     pub fn new() -> Settings {
         Settings {
-            is_set_flags: 0,
+            is_set_flags: IsSet(0),
             max_bytes_per_key: 0,
             handshake_idle_timeout_ms: 0,
             idle_timeout_ms: 0,
@@ -1149,24 +1200,46 @@ impl Settings {
             stateless_operation_expiration_ms: 0,
             minimum_mtu: 0,
             maximum_mtu: 0,
-            other_flags: 0,
+            flags: SettingsFlags(0),
             mtu_operations_per_drain: 0,
             mtu_discovery_missing_probe_count: 0,
         }
     }
+
+    pub fn set_conn_flow_control_window(&mut self, value: u32) -> &mut Settings {
+        self.is_set_flags.set_conn_flow_control_window(1);
+        self.conn_flow_control_window = value;
+        self
+    }
+
+    pub fn set_idle_timeout_ms(&mut self, value: u64) -> &mut Settings {
+        self.is_set_flags.set_idle_timeout_ms(1);
+        self.idle_timeout_ms = value;
+        self
+    }
     pub fn set_peer_bidi_stream_count(&mut self, value: u16) -> &mut Settings {
-        self.is_set_flags |= 0x40000;
+        self.is_set_flags.set_peer_bidi_stream_count(1);
         self.peer_bidi_stream_count = value;
         self
     }
     pub fn set_peer_unidi_stream_count(&mut self, value: u16) -> &mut Settings {
-        self.is_set_flags |= 0x80000;
+        self.is_set_flags.set_peer_unidi_stream_count(1);
         self.peer_unidi_stream_count = value;
         self
     }
-    pub fn set_idle_timeout_ms(&mut self, value: u64) -> &mut Settings {
-        self.is_set_flags |= 0x4;
-        self.idle_timeout_ms = value;
+    pub fn set_minimum_mtu(&mut self, value: u16) -> &mut Settings {
+        self.is_set_flags.set_minimum_mtu(1);
+        self.minimum_mtu = value;
+        self
+    }
+    pub fn set_maximum_mtu(&mut self, value: u16) -> &mut Settings {
+        self.is_set_flags.set_maximum_mtu(1);
+        self.maximum_mtu = value;
+        self
+    }
+    pub fn set_send_buffering_enabled(&mut self, value: u8) -> &mut Settings {
+        self.is_set_flags.set_send_buffering_enabled(1);
+        self.flags.set_send_buffering_enabled(value);
         self
     }
 }
