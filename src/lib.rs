@@ -11,6 +11,7 @@ use libc::c_void;
 use serde::{Deserialize, Serialize};
 use std::convert::TryInto;
 use std::fmt;
+use std::net::IpAddr;
 use std::option::Option;
 use std::ptr;
 #[macro_use]
@@ -96,6 +97,17 @@ impl Addr {
                 addr,
                 scope_id,
             },
+        }
+    }
+}
+
+impl From<IpAddr> for Addr {
+    fn from(source: IpAddr) -> Self {
+        match source {
+            IpAddr::V4(v4) => Addr::ipv4(ADDRESS_FAMILY_INET, 0, unsafe {
+                std::mem::transmute::<[u8; 4], u32>(v4.octets()).to_le()
+            }),
+            IpAddr::V6(v6) => Addr::ipv6(ADDRESS_FAMILY_INET6, 0, 0, v6.octets(), 0),
         }
     }
 }
