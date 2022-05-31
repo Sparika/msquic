@@ -1229,6 +1229,11 @@ impl Settings {
         self.idle_timeout_ms = value;
         self
     }
+    pub fn set_keep_alive_interval_ms(&mut self, value: u32) -> &mut Settings {
+        self.is_set_flags.set_keep_alive_interval_ms(1);
+        self.keep_alive_interval_ms = value;
+        self
+    }
     pub fn set_peer_bidi_stream_count(&mut self, value: u16) -> &mut Settings {
         self.is_set_flags.set_peer_bidi_stream_count(1);
         self.peer_bidi_stream_count = value;
@@ -1608,6 +1613,12 @@ impl Stream {
         let status = unsafe { ((*self.table).stream_start)(self.handle, flags) };
         if Status::failed(status) {
             panic!("StreamStart failure 0x{:x}", status);
+        }
+    }
+
+    pub fn shutdown(&self, flags: StreamShutdownFlags, error_code: u62) {
+        unsafe {
+            ((*self.table).stream_shutdown)(self.handle, flags, error_code);
         }
     }
 
