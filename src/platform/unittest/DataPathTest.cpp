@@ -19,6 +19,11 @@ Abstract:
 
 extern bool UseDuoNic;
 
+//
+// Connect to the duonic address (if using duonic) or localhost (if not).
+//
+#define QUIC_TEST_LOOPBACK_FOR_AF(Af) (UseDuoNic ? ((Af == QUIC_ADDRESS_FAMILY_INET) ? "192.168.1.11" : "fc00::1:11") : QUIC_LOCALHOST_FOR_AF(Af))
+
 const uint32_t ExpectedDataSize = 1 * 1024;
 char* ExpectedData;
 
@@ -233,13 +238,8 @@ protected:
         //
         NextPort = 50000 + (CxPlatCurThreadID() % 10000) + (rand() % 5000);
 
-        if (UseDuoNic) {
-            LocalIPv4.Resolve(QUIC_ADDRESS_FAMILY_INET, "192.168.1.11");
-            LocalIPv6.Resolve(QUIC_ADDRESS_FAMILY_INET6, "fc00::1:11");
-        } else {
-            LocalIPv4.Resolve(QUIC_ADDRESS_FAMILY_INET, QUIC_LOCALHOST_FOR_AF(QUIC_ADDRESS_FAMILY_INET));
-            LocalIPv6.Resolve(QUIC_ADDRESS_FAMILY_INET6, QUIC_LOCALHOST_FOR_AF(QUIC_ADDRESS_FAMILY_INET6));
-        }
+        LocalIPv4.Resolve(QUIC_ADDRESS_FAMILY_INET, QUIC_TEST_LOOPBACK_FOR_AF(QUIC_ADDRESS_FAMILY_INET));
+        LocalIPv6.Resolve(QUIC_ADDRESS_FAMILY_INET6, QUIC_TEST_LOOPBACK_FOR_AF(QUIC_ADDRESS_FAMILY_INET6));
 
         UnspecIPv4.Resolve(QUIC_ADDRESS_FAMILY_INET, "0.0.0.0");
         UnspecIPv6.Resolve(QUIC_ADDRESS_FAMILY_INET6, "::");
@@ -546,7 +546,7 @@ struct CxPlatSocket {
                 // complete synchronously. If this changes, we will need to add code to
                 // wait for an event set by ResolveRouteComplete.
                 //
-                ASSERT_TRUE(InitStatus == QUIC_STATUS_SUCCESS);
+                EXPECT_EQ(InitStatus, QUIC_STATUS_SUCCESS);
             }
 #endif
         }
@@ -883,7 +883,27 @@ TEST_P(DataPathTest, UdpShareClientSocket)
     CxPlatEventReset(RecvContext.ClientCompletion);
 }
 
-#if WIN32
+TEST_P(DataPathTest, MultiBindListener) {
+    UdpRecvContext RecvContext;
+    CxPlatDataPath Datapath(&UdpRecvCallbacks);
+    if (!(Datapath.GetSupportedFeatures() & CXPLAT_DATAPATH_FEATURE_PORT_RESERVATIONS)) {
+        std::cout << "SKIP: Port Reservations Feature Unsupported" << std::endl;
+        return;
+    }
+
+    auto ServerAddress = GetNewLocalAddr();
+    CxPlatSocket Server1(Datapath, &ServerAddress.SockAddr, nullptr, &RecvContext);
+    while (Server1.GetInitStatus() == QUIC_STATUS_ADDRESS_IN_USE) {
+        ServerAddress.SockAddr.Ipv4.sin_port = GetNextPort();
+        Server1.CreateUdp(Datapath, &ServerAddress.SockAddr, nullptr, &RecvContext);
+    }
+    VERIFY_QUIC_SUCCESS(Server1.GetInitStatus());
+
+    CxPlatSocket Server2(Datapath, &ServerAddress.SockAddr, nullptr, &RecvContext);
+    ASSERT_EQ(QUIC_STATUS_ADDRESS_IN_USE, Server2.GetInitStatus());
+}
+
+#ifdef WIN32
 TEST_F(DataPathTest, TcpListener)
 {
     CxPlatDataPath Datapath(nullptr, &EmptyTcpCallbacks);

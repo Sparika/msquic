@@ -12,6 +12,7 @@
 
 bool TestingKernelMode = false;
 bool PrivateTestLibrary = false;
+bool UseDuoNic = false;
 const MsQuicApi* MsQuic;
 QUIC_CREDENTIAL_CONFIG ServerSelfSignedCredConfig;
 QUIC_CREDENTIAL_CONFIG ServerSelfSignedCredConfigClientAuth;
@@ -111,7 +112,7 @@ LogTestFailure(
     )
 {
     UNREFERENCED_PARAMETER(Function);
-    char Buffer[128];
+    char Buffer[256];
     va_list Args;
     va_start(Args, Format);
     (void)_vsnprintf_s(Buffer, sizeof(Buffer), _TRUNCATE, Format, Args);
@@ -785,6 +786,14 @@ TEST_P(WithHandshakeArgs7, CibirExtension) {
     }
 }
 
+// TEST(Handshake, ResumptionAcrossVersions) {
+//     if (TestingKernelMode) {
+//         ASSERT_TRUE(DriverClient.Run(IOCTL_QUIC_RUN_RESUMPTION_ACROSS_VERSIONS));
+//     } else {
+//         QuicTestResumptionAcrossVersions();
+//     }
+// }
+
 #if QUIC_TEST_FAILING_TEST_CERTIFICATES
 TEST(CredValidation, ConnectExpiredServerCertificate) {
     QUIC_RUN_CRED_VALIDATION Params;
@@ -1099,6 +1108,15 @@ TEST_P(WithFamilyArgs, ServerRejected) {
         ASSERT_TRUE(DriverClient.Run(IOCTL_QUIC_RUN_CONNECT_SERVER_REJECTED, GetParam().Family));
     } else {
         QuicTestConnectServerRejected(GetParam().Family);
+    }
+}
+
+TEST_P(WithFamilyArgs, ClientBlockedSourcePort) {
+    TestLoggerT<ParamType> Logger("QuicTestClientBlockedSourcePort", GetParam());
+    if (TestingKernelMode) {
+        ASSERT_TRUE(DriverClient.Run(IOCTL_QUIC_RUN_CLIENT_BLOCKED_SOURCE_PORT, GetParam().Family));
+    } else {
+        QuicTestClientBlockedSourcePort(GetParam().Family);
     }
 }
 
@@ -1684,6 +1702,25 @@ TEST_P(WithFamilyArgs, DatagramSend) {
     }
 }
 
+#ifdef _WIN32 // Storage tests only supported on Windows
+
+static BOOLEAN CanRunStorageTests = FALSE;
+
+TEST(Basic, TestStorage) {
+    if (!CanRunStorageTests) {
+        return;
+    }
+
+    TestLogger Logger("QuicTestStorage");
+    if (TestingKernelMode) {
+        ASSERT_TRUE(DriverClient.Run(IOCTL_QUIC_RUN_STORAGE));
+    } else {
+        QuicTestStorage();
+    }
+}
+
+#endif // _WIN32
+
 INSTANTIATE_TEST_SUITE_P(
     ParameterValidation,
     WithBool,
@@ -1846,12 +1883,28 @@ INSTANTIATE_TEST_SUITE_P(
     testing::ValuesIn(DrillInitialPacketTokenArgs::Generate()));
 
 int main(int argc, char** argv) {
+#ifdef _WIN32
+    //
+    // Try to create settings registry key
+    //
+    HKEY Key;
+    DWORD Result =
+        RegCreateKeyA(
+            HKEY_LOCAL_MACHINE,
+            "System\\CurrentControlSet\\Services\\MsQuic\\Parameters\\Apps\\StorageTest",
+            &Key);
+    CanRunStorageTests = Result == NO_ERROR;
+    RegCloseKey(Key);
+#endif
+
     for (int i = 0; i < argc; ++i) {
         if (strcmp("--kernel", argv[i]) == 0 || strcmp("--kernelPriv", argv[i]) == 0) {
             TestingKernelMode = true;
             if (strcmp("--kernelPriv", argv[i]) == 0) {
                 PrivateTestLibrary = true;
             }
+        } else if (strcmp("--duoNic", argv[i]) == 0) {
+            UseDuoNic = true;
         }
     }
     ::testing::AddGlobalTestEnvironment(new QuicTestEnvironment);

@@ -23,6 +23,24 @@ void QuicTestValidateApi()
         MsQuicOpen2(nullptr));
 
     MsQuicClose(nullptr);
+
+    // TODO - Move these into GetParam/SetParam tests
+    QUIC_TLS_PROVIDER TlsProvider;
+    uint32_t BufferLength = sizeof(TlsProvider);
+    TEST_QUIC_SUCCEEDED(
+        MsQuic->GetParam(
+            nullptr,
+            QUIC_PARAM_GLOBAL_TLS_PROVIDER,
+            &BufferLength,
+            &TlsProvider));
+
+    TEST_EQUAL(
+        MsQuic->SetParam(
+            nullptr,
+            QUIC_PARAM_GLOBAL_TLS_PROVIDER,
+            BufferLength,
+            &TlsProvider),
+        QUIC_STATUS_INVALID_PARAMETER);
 }
 
 void QuicTestValidateRegistration()
@@ -1023,7 +1041,7 @@ void QuicTestValidateConnection()
             TestScopeLogger logScope("SendResumption in Listener callback");
             MsQuicConnection Connection(Registration);
             TEST_QUIC_SUCCEEDED(Connection.GetInitStatus());
-            TEST_QUIC_SUCCEEDED(Connection.StartLocalhost(ClientConfiguration, ServerLocalAddr));
+            TEST_QUIC_SUCCEEDED(Connection.Start(ClientConfiguration, ServerLocalAddr.GetFamily(), QUIC_TEST_LOOPBACK_FOR_AF(ServerLocalAddr.GetFamily()), ServerLocalAddr.GetPort()));
             TEST_TRUE(ListenerContext.ListenerAcceptEvent.WaitTimeout(2000));
             }
 
@@ -1035,7 +1053,7 @@ void QuicTestValidateConnection()
             TestScopeLogger logScope("SendResumption with resumption disabled");
             MsQuicConnection Connection(Registration);
             TEST_QUIC_SUCCEEDED(Connection.GetInitStatus());
-            TEST_QUIC_SUCCEEDED(Connection.StartLocalhost(ClientConfiguration, ServerLocalAddr));
+            TEST_QUIC_SUCCEEDED(Connection.Start(ClientConfiguration, ServerLocalAddr.GetFamily(), QUIC_TEST_LOOPBACK_FOR_AF(ServerLocalAddr.GetFamily()), ServerLocalAddr.GetPort()));
             TEST_TRUE(ListenerContext.ListenerAcceptEvent.WaitTimeout(2000));
             TEST_TRUE(ListenerContext.HandshakeCompleteEvent.WaitTimeout(2000)); // Wait for server to get connected
             }
@@ -1048,7 +1066,7 @@ void QuicTestValidateConnection()
             TestScopeLogger logScope("SendResumption handshake not complete");
             MsQuicConnection Connection(Registration);
             TEST_QUIC_SUCCEEDED(Connection.GetInitStatus());
-            TEST_QUIC_SUCCEEDED(Connection.StartLocalhost(ClientConfiguration, ServerLocalAddr));
+            TEST_QUIC_SUCCEEDED(Connection.Start(ClientConfiguration, ServerLocalAddr.GetFamily(), QUIC_TEST_LOOPBACK_FOR_AF(ServerLocalAddr.GetFamily()), ServerLocalAddr.GetPort()));
             TEST_TRUE(ListenerContext.ListenerAcceptEvent.WaitTimeout(2000));
             TEST_TRUE(Connection.HandshakeCompleteEvent.WaitTimeout(2000)); // Wait for client to get connected
 
@@ -1246,7 +1264,7 @@ void QuicTestValidateStream(bool Connect)
                     Client.Start(
                         ClientConfiguration,
                         QuicAddrGetFamily(&ServerLocalAddr.SockAddr),
-                        QUIC_LOCALHOST_FOR_AF(
+                        QUIC_TEST_LOOPBACK_FOR_AF(
                             QuicAddrGetFamily(&ServerLocalAddr.SockAddr)),
                         ServerLocalAddr.GetPort()));
 
@@ -2104,7 +2122,7 @@ QuicTestConnectionRejection(
 
     MsQuicConnection Connection(Registration);
     TEST_QUIC_SUCCEEDED(Connection.GetInitStatus());
-    TEST_QUIC_SUCCEEDED(Connection.StartLocalhost(ClientConfiguration, ServerLocalAddr));
+    TEST_QUIC_SUCCEEDED(Connection.Start(ClientConfiguration, ServerLocalAddr.GetFamily(), QUIC_TEST_LOOPBACK_FOR_AF(ServerLocalAddr.GetFamily()), ServerLocalAddr.GetPort()));
 
     if (RejectByClosing) {
         TEST_TRUE(ShutdownEvent.WaitTimeout(TestWaitTimeout));
@@ -2125,4 +2143,189 @@ QuicTestCredentialLoad(const QUIC_CREDENTIAL_CONFIG* Config)
     TEST_TRUE(Configuration.IsValid());
 
     TEST_QUIC_SUCCEEDED(Configuration.LoadCredential(Config));
+}
+
+void
+QuicTestStorage()
+{
+    const uint32_t SpecialInitialRtt = 55;
+
+#ifdef _KERNEL_MODE
+    DECLARE_CONST_UNICODE_STRING(GlobalStoragePath, L"\\Registry\\Machine\\System\\CurrentControlSet\\Services\\MsQuic\\Parameters\\");
+    DECLARE_CONST_UNICODE_STRING(AppStoragePath, L"\\Registry\\Machine\\System\\CurrentControlSet\\Services\\MsQuic\\Parameters\\Apps\\StorageTest\\");
+    DECLARE_CONST_UNICODE_STRING(ValueName, L"InitialRttMs");
+    HANDLE GlobalKey, AppKey;
+    OBJECT_ATTRIBUTES GlobalAttributes, AppAttributes;
+    InitializeObjectAttributes(
+        &GlobalAttributes,
+        (PUNICODE_STRING)&GlobalStoragePath,
+        OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE,
+        NULL,
+        NULL);
+    InitializeObjectAttributes(
+        &AppAttributes,
+        (PUNICODE_STRING)&AppStoragePath,
+        OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE,
+        NULL,
+        NULL);
+    TEST_QUIC_SUCCEEDED(
+        ZwOpenKey(
+            &GlobalKey,
+            KEY_READ | KEY_NOTIFY,
+            &GlobalAttributes));
+    ZwDeleteValueKey(
+        GlobalKey,
+        (PUNICODE_STRING)&ValueName);
+    if (QUIC_SUCCEEDED(
+        ZwOpenKey(
+            &AppKey,
+            KEY_READ | KEY_NOTIFY,
+            &AppAttributes))) {
+        ZwDeleteKey(AppKey);
+        ZwClose(AppKey);
+    }
+    TEST_QUIC_SUCCEEDED(
+        ZwCreateKey(
+            &AppKey,
+            KEY_READ | KEY_NOTIFY,
+            &AppAttributes,
+            0,
+            NULL,
+            REG_OPTION_NON_VOLATILE,
+            NULL));
+#elif _WIN32
+    RegDeleteKeyValueA(
+        HKEY_LOCAL_MACHINE,
+        "System\\CurrentControlSet\\Services\\MsQuic\\Parameters",
+        "InitialRttMs");
+    RegDeleteKeyA(
+        HKEY_LOCAL_MACHINE,
+        "System\\CurrentControlSet\\Services\\MsQuic\\Parameters\\Apps\\StorageTest");
+    HKEY Key;
+    RegCreateKeyA(
+        HKEY_LOCAL_MACHINE,
+        "System\\CurrentControlSet\\Services\\MsQuic\\Parameters\\Apps\\StorageTest",
+        &Key);
+    RegCloseKey(Key);
+#else
+    TEST_FAILURE("Storage tests not supported on this platform");
+#endif
+
+    MsQuicSettings Settings;
+
+    //
+    // Global settings
+    //
+
+    TEST_QUIC_SUCCEEDED(Settings.GetGlobal());
+    TEST_NOT_EQUAL(Settings.InitialRttMs, SpecialInitialRtt);
+
+#ifdef _KERNEL_MODE
+    TEST_QUIC_SUCCEEDED(
+        ZwSetValueKey(
+            GlobalKey,
+            (PUNICODE_STRING)&ValueName,
+            0,
+            REG_DWORD,
+            (PVOID)&SpecialInitialRtt,
+            sizeof(SpecialInitialRtt)));
+#elif _WIN32
+    TEST_EQUAL(
+        NO_ERROR,
+        RegSetKeyValueA(
+            HKEY_LOCAL_MACHINE,
+            "System\\CurrentControlSet\\Services\\MsQuic\\Parameters",
+            "InitialRttMs",
+            REG_DWORD,
+            &SpecialInitialRtt,
+            sizeof(SpecialInitialRtt)));
+#else
+    TEST_FAILURE("Storage tests not supported on this platform");
+#endif
+
+    CxPlatSleep(100);
+    TEST_QUIC_SUCCEEDED(Settings.GetGlobal());
+    TEST_EQUAL(Settings.InitialRttMs, SpecialInitialRtt);
+
+#ifdef _KERNEL_MODE
+    TEST_QUIC_SUCCEEDED(
+        ZwDeleteValueKey(
+            GlobalKey,
+            (PUNICODE_STRING)&ValueName));
+    ZwClose(GlobalKey);
+#elif _WIN32
+    TEST_EQUAL(
+        NO_ERROR,
+        RegDeleteKeyValueA(
+            HKEY_LOCAL_MACHINE,
+            "System\\CurrentControlSet\\Services\\MsQuic\\Parameters",
+            "InitialRttMs"));
+#else
+    TEST_FAILURE("Storage tests not supported on this platform");
+#endif
+
+    CxPlatSleep(100);
+    TEST_QUIC_SUCCEEDED(Settings.GetGlobal());
+    TEST_NOT_EQUAL(Settings.InitialRttMs, SpecialInitialRtt);
+
+    //
+    // App settings
+    //
+
+    MsQuicRegistration Registration("StorageTest");
+    TEST_TRUE(Registration.IsValid());
+
+    MsQuicConfiguration Configuration(Registration, "MsQuicTest");
+    TEST_TRUE(Configuration.IsValid());
+
+    TEST_QUIC_SUCCEEDED(Configuration.GetSettings(Settings));
+    TEST_NOT_EQUAL(Settings.InitialRttMs, SpecialInitialRtt);
+
+#ifdef _KERNEL_MODE
+    TEST_QUIC_SUCCEEDED(
+        ZwSetValueKey(
+            AppKey,
+            (PUNICODE_STRING)&ValueName,
+            0,
+            REG_DWORD,
+            (PVOID)&SpecialInitialRtt,
+            sizeof(SpecialInitialRtt)));
+#elif _WIN32
+    TEST_EQUAL(
+        NO_ERROR,
+        RegSetKeyValueA(
+            HKEY_LOCAL_MACHINE,
+            "System\\CurrentControlSet\\Services\\MsQuic\\Parameters\\Apps\\StorageTest",
+            "InitialRttMs",
+            REG_DWORD,
+            &SpecialInitialRtt,
+            sizeof(SpecialInitialRtt)));
+#else
+    TEST_FAILURE("Storage tests not supported on this platform");
+#endif
+
+    CxPlatSleep(100);
+    TEST_QUIC_SUCCEEDED(Configuration.GetSettings(Settings));
+    TEST_EQUAL(Settings.InitialRttMs, SpecialInitialRtt);
+
+#ifdef _KERNEL_MODE
+    TEST_QUIC_SUCCEEDED(
+        ZwDeleteValueKey(
+            AppKey,
+            (PUNICODE_STRING)&ValueName));
+    ZwClose(AppKey);
+#elif _WIN32
+    TEST_EQUAL(
+        NO_ERROR,
+        RegDeleteKeyValueA(
+            HKEY_LOCAL_MACHINE,
+            "System\\CurrentControlSet\\Services\\MsQuic\\Parameters\\Apps\\StorageTest",
+            "InitialRttMs"));
+#else
+    TEST_FAILURE("Storage tests not supported on this platform");
+#endif
+
+    CxPlatSleep(100);
+    TEST_QUIC_SUCCEEDED(Configuration.GetSettings(Settings));
+    TEST_NOT_EQUAL(Settings.InitialRttMs, SpecialInitialRtt);
 }

@@ -2,7 +2,8 @@
 
 MsQuic supports a number of configuration knobs (or settings). These settings can either be set dynamically (via the [QUIC_SETTINGS](./api/QUIC_SETTINGS.md) structure) or via persistent storage (e.g. registry on Windows).
 
-> **Important** - Generally MsQuic already choses the best / most correct default values for all settings. Settings should only be changed after due diligence and A/B testing is performed.
+> **Warning**
+> Generally MsQuic already choses the best / most correct default values for all settings. Settings should only be changed after due diligence and A/B testing is performed.
 
 MsQuic settings are available on most MsQuic API objects. [Here](#api-object-parameters) we'll provide an overview of them with links to further details.
 
@@ -88,7 +89,8 @@ These parameters are accessed by calling [GetParam](./api/GetParam.md) or [SetPa
 | `QUIC_PARAM_GLOBAL_GLOBAL_SETTINGS`<br> 6         | QUIC_GLOBAL_SETTINGS    | Both      | Globally change global only settings.                                                                 |
 | `QUIC_PARAM_GLOBAL_VERSION_SETTINGS`<br> 7        | QUIC_VERSIONS_SETTINGS  | Both      | Globally change version settings for all subsequent connections.                                      |
 | `QUIC_PARAM_GLOBAL_LIBRARY_GIT_HASH`<br> 8        | char[64]                | Get-only  | Git hash used to build MsQuic (null terminated string)                                                |
-| `QUIC_PARAM_GLOBAL_RAW_DATAPATH_PROCS`<br> 9      | uint16_t[]              | Both      | Globally change the list of CPUs that raw datapath can use. Must be set before opening registration.  |
+| `QUIC_PARAM_GLOBAL_DATAPATH_PROCESSORS`<br> 9      | uint16_t[]              | Both      | Globally change the list of CPUs that datapath can use. Must be set before opening registration.  |
+| `QUIC_PARAM_GLOBAL_TLS_PROVIDER`<br> 10      | QUIC_TLS_PROVIDER | Get-Only | The TLS provider being used by MsQuic for the TLS handshake. |
 
 
 ### Registration Parameters
@@ -165,7 +167,7 @@ These parameters are access by calling [GetParam](./api/GetParam.md) or [SetPara
 
 | Setting                                           | Type              | Get/Set   | Description                                                                           |
 |---------------------------------------------------|-------------------|-----------|---------------------------------------------------------------------------------------|
-| `QUIC_PARAM_STREAM_ID`<br> 0                      | QUIC_UINT62       | Set-only  | Must be called on a stream before [StreamStart](./api/StreamStart.md) is called.      |
+| `QUIC_PARAM_STREAM_ID`<br> 0                      | QUIC_UINT62       | Get-only  | Must be called on a stream before [StreamStart](./api/StreamStart.md) is called.      |
 | `QUIC_PARAM_STREAM_0RTT_LENGTH`<br> 1             | uint64_t          | Get-only  | Length of 0-RTT data received from peer.                                              |
 | `QUIC_PARAM_STREAM_IDEAL_SEND_BUFFER_SIZE`<br> 2  | uint64_t - bytes  | Get-only  | Ideal buffer size to queue to the stream. Assumes only one stream sends steadily.     |
 

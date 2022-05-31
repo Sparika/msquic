@@ -213,6 +213,9 @@ QuicTestCibirExtension(
     _In_ uint8_t Mode // server = &1, client = &2
     );
 
+void
+QuicTestResumptionAcrossVersions();
+
 //
 // Negative Handshake Tests
 //
@@ -259,6 +262,11 @@ QuicTestConnectValidClientCertificate(
 void
 QuicTestConnectExpiredClientCertificate(
     _In_ const QUIC_CREDENTIAL_CONFIG* Config
+    );
+
+void
+QuicTestClientBlockedSourcePort(
+    _In_ int Family
     );
 
 //
@@ -482,6 +490,13 @@ QuicTestDatagramNegotiation(
 void
 QuicTestDatagramSend(
     _In_ int Family
+    );
+
+//
+// Storage tests
+//
+void
+QuicTestStorage(
     );
 
 //
@@ -998,4 +1013,14 @@ typedef struct {
 #define IOCTL_QUIC_RUN_STREAM_PRIORITY_INFINITE_LOOP \
     QUIC_CTL_CODE(86, METHOD_BUFFERED, FILE_WRITE_DATA)
 
-#define QUIC_MAX_IOCTL_FUNC_CODE 86
+#define IOCTL_QUIC_RUN_RESUMPTION_ACROSS_VERSIONS \
+    QUIC_CTL_CODE(87, METHOD_BUFFERED, FILE_WRITE_DATA)
+
+#define IOCTL_QUIC_RUN_CLIENT_BLOCKED_SOURCE_PORT \
+    QUIC_CTL_CODE(88, METHOD_BUFFERED, FILE_WRITE_DATA)
+    // int - Family
+
+#define IOCTL_QUIC_RUN_STORAGE \
+    QUIC_CTL_CODE(89, METHOD_BUFFERED, FILE_WRITE_DATA)
+
+#define QUIC_MAX_IOCTL_FUNC_CODE 89
