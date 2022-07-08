@@ -141,7 +141,7 @@ impl Status {
 /// The different possible TLS providers used by MsQuic.
 pub type TlsProvider = u32;
 pub const TLS_PROVIDER_SCHANNEL: TlsProvider = 0;
-pub const TLS_PROVIDER_OPENSSL : TlsProvider = 1;
+pub const TLS_PROVIDER_OPENSSL: TlsProvider = 1;
 
 /// Configures how to process a registration's workload.
 pub type ExecutionProfile = u32;
@@ -1226,6 +1226,12 @@ impl Settings {
         }
     }
 
+    pub fn set_stream_recv_window_default(&mut self, value: u32) -> &mut Settings {
+        self.is_set_flags.set_stream_recv_window_default(1);
+        self.stream_recv_window_default = value;
+        self
+    }
+
     pub fn set_conn_flow_control_window(&mut self, value: u32) -> &mut Settings {
         self.is_set_flags.set_conn_flow_control_window(1);
         self.conn_flow_control_window = value;
@@ -1265,6 +1271,11 @@ impl Settings {
     pub fn set_send_buffering_enabled(&mut self, value: u8) -> &mut Settings {
         self.is_set_flags.set_send_buffering_enabled(1);
         self.flags.set_send_buffering_enabled(value);
+        self
+    }
+    pub fn set_pacing_enabled(&mut self, value: u8) -> &mut Settings {
+        self.is_set_flags.set_pacing_enabled(1);
+        self.flags.set_pacing_enabled(value);
         self
     }
 }
