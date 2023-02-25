@@ -48,7 +48,7 @@ jobs:
          cmake --build . --target OpenSSL_Target
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@a3a6c128d771b6b9bdebb1c9d0583ebd2728a108
+        uses: github/codeql-action/init@32dc499307d133bb5085bae78498c0ac2cf762d5
         with:
           languages: cpp
           config-file: ./.github/codeql/codeql-config.yml
@@ -59,4 +59,4 @@ jobs:
          cmake --build .
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@a3a6c128d771b6b9bdebb1c9d0583ebd2728a108
+        uses: github/codeql-action/analyze@32dc499307d133bb5085bae78498c0ac2cf762d5
